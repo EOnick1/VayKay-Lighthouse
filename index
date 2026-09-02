@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- ============================================================
+     CONFIG  —  the only part you normally touch
+     ============================================================ -->
+<script>
+const CONFIG = {
+  // 1) Paste the "Publish to web -> CSV" link from your Google Sheet here.
+  //    Leave it as-is to see the demo.
+  CSV_URL: https://docs.google.com/spreadsheets/d/e/2PACX-1vSlNnvgBwkcmnNL20fivuzfGnFwZBzaWH2f-56-EdveTwwCj9-WLgLrUJlJZrYw3_o-VxYQzAO4vsot/pub?gid=0&single=true&output=csv,
+
+  // 2) Who this page is for (shown at the top).
+  NAME: "Kaylee",
+
+  // 3) How often the page checks the sheet, in minutes.
+  REFRESH_MINUTES: 10,
+
+  // 4) Wording for each light. Edit freely — the sheet only controls
+  //    which light is lit (green / yellow / red) and the note.
+  COPY: {
+    green:   { word: "All good",             sub: "Everything's running fine \u2014 enjoy your break." },
+    yellow:  { word: "Keeping an eye on it", sub: "Something might need attention, but it's handled for now." },
+    red:     { word: "I need you",           sub: "There's something only you can solve. Check the note below." },
+    unknown: { word: "No reading yet",       sub: "The status couldn't load. This is almost certainly a connection hiccup, not a real problem \u2014 try again in a minute." }
+  }
+};
+</script>
+
+<style>
+  :root{
+    --ink:#23282a; --muted:#6b7478; --line:rgba(35,40,42,.10);
+    --card:#ffffff;
+    --tint:#eef1f2; --accent:#5f6a70;               /* overridden per state */
+    --housing:#2a2f31;
+    --lamp-off:#3c4245;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    color:var(--ink);
+    background:var(--tint);
+    transition:background .6s ease;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{
+    min-height:100svh;
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:center;
+    gap:26px;
+    padding:40px 22px 30px;
+    max-width:520px; margin:0 auto;
+    text-align:center;
+  }
+
+  .eyebrow{ font-size:15px; color:var(--muted); letter-spacing:.2px; }
+  .eyebrow b{ color:var(--ink); font-weight:600; }
+
+  /* ---- the signal ---- */
+  .signal{
+    background:linear-gradient(180deg,#31363a,#23282b);
+    border-radius:60px;
+    padding:26px 24px;
+    display:flex; flex-direction:column; gap:22px;
+    box-shadow:0 22px 50px -22px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .lamp{
+    width:96px; height:96px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #4a5155, var(--lamp-off));
+    box-shadow:inset 0 3px 8px rgba(0,0,0,.55), inset 0 -2px 6px rgba(255,255,255,.04);
+    position:relative; transition:all .45s ease;
+  }
+  @media (max-width:400px){ .lamp{ width:80px; height:80px } }
+  .lamp::after{ /* soft top highlight */
+    content:""; position:absolute; inset:0; border-radius:50%;
+    background:radial-gradient(circle at 38% 28%, rgba(255,255,255,.28), transparent 42%);
+    opacity:.25; transition:opacity .45s ease;
+  }
+  .lamp.on::after{ opacity:.9 }
+
+  .lamp[data-lamp="green"].on{
+    background:radial-gradient(circle at 36% 30%, #7ec994, #3f9c5c);
+    box-shadow:0 0 46px 6px rgba(79,165,104,.60), inset 0 2px 6px rgba(255,255,255,.35);
+  }
+  .lamp[data-lamp="yellow"].on{
+    background:radial-gradient(circle at 36% 30%, #f2ca6b, #dc9c22);
+    box-shadow:0 0 46px 6px rgba(226,165,44,.60), inset 0 2px 6px rgba(255,255,255,.30);
+  }
+  .lamp[data-lamp="red"].on{
+    background:radial-gradient(circle at 36% 30%, #f0806c, #cf422f);
+    box-shadow:0 0 48px 8px rgba(216,79,59,.62), inset 0 2px 6px rgba(255,255,255,.28);
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .lamp[data-lamp="red"].on{ animation:pulse 1.7s ease-in-out infinite; }
+    @keyframes pulse{
+      0%,100%{ box-shadow:0 0 40px 4px rgba(216,79,59,.50), inset 0 2px 6px rgba(255,255,255,.28); }
+      50%    { box-shadow:0 0 62px 12px rgba(216,79,59,.78), inset 0 2px 6px rgba(255,255,255,.28); }
+    }
+  }
+
+  /* ---- headline ---- */
+  .status{ margin:0; }
+  .status .word{
+    font-family:"Fraunces",Georgia,serif;
+    font-weight:600; line-height:1.02;
+    font-size:clamp(2.5rem,10vw,4rem);
+    color:var(--accent); transition:color .5s ease;
+  }
+  .status .sub{
+    margin:12px auto 0; max-width:34ch;
+    font-size:16px; line-height:1.5; color:var(--muted);
+  }
+
+  /* ---- note ---- */
+  .note{
+    width:100%;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:18px 20px; text-align:left;
+    box-shadow:0 10px 30px -20px rgba(0,0,0,.35);
+  }
+  .note .label{ font-size:13px; color:var(--muted); margin:0 0 6px; }
+  .note .body{ margin:0; font-size:16.5px; line-height:1.55; white-space:pre-wrap; }
+
+  /* ---- footer / freshness ---- */
+  .foot{ display:flex; flex-direction:column; gap:8px; align-items:center; margin-top:2px; }
+  .stamp{ font-size:13.5px; color:var(--muted); }
+  .stamp b{ color:var(--ink); font-weight:600; }
+  .live{ display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--muted); }
+  .dot{ width:8px; height:8px; border-radius:50%; background:var(--accent); }
+  @media (prefers-reduced-motion: no-preference){
+    .live .dot{ animation:blink 2.4s ease-in-out infinite; }
+    @keyframes blink{ 0%,100%{opacity:1} 50%{opacity:.35} }
+  }
+  .btn{
+    margin-top:4px;
+    font:inherit; font-size:14px; color:var(--ink);
+    background:var(--card); border:1px solid var(--line);
+    border-radius:999px; padding:9px 18px; cursor:pointer;
+    transition:transform .1s ease, background .2s ease;
+  }
+  .btn:hover{ background:#fafafa }
+  .btn:active{ transform:translateY(1px) }
+  .btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px }
+
+  .banner{
+    width:100%; font-size:13.5px; line-height:1.45;
+    color:#7a4a12; background:#fdf3e0; border:1px solid #f0dcb4;
+    border-radius:12px; padding:10px 14px; display:none;
+  }
+  .banner.show{ display:block }
+
+  /* ---- per-state background tint + accent ---- */
+  .page[data-state="green"]  { --tint:#eef4ee; --accent:#3f7d51; }
+  .page[data-state="yellow"] { --tint:#f8f2e4; --accent:#9a6f16; }
+  .page[data-state="red"]    { --tint:#f8ede9; --accent:#b23f2c; }
+  .page[data-state="unknown"]{ --tint:#eef1f2; --accent:#5f6a70; }
+  .page{ background:var(--tint); transition:background .6s ease; }
+</style>
+</head>
+<body>
+  <main class="page" id="page" data-state="unknown">
+    <p class="eyebrow">A status check for <b id="who">someone</b>, while you're away</p>
+
+    <div class="signal" role="img" aria-label="Status light" id="signal">
+      <div class="lamp" data-lamp="red"></div>
+      <div class="lamp" data-lamp="yellow"></div>
+      <div class="lamp" data-lamp="green"></div>
+    </div>
+
+    <div class="status" role="status" aria-live="polite">
+      <h1 class="word" id="word">Loading…</h1>
+      <p class="sub" id="sub">Checking the board.</p>
+    </div>
+
+    <section class="note">
+      <p class="label">Note from me</p>
+      <p class="body" id="note">—</p>
+    </section>
+
+    <div class="banner" id="banner"></div>
+
+    <div class="foot">
+      <div class="stamp" id="updated"></div>
+      <span class="live"><span class="dot"></span><span id="checked">…</span></span>
+      <button class="btn" id="refresh" type="button">Check now</button>
+    </div>
+  </main>
+
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const page=$("page"), word=$("word"), sub=$("sub"), noteEl=$("note"),
+        updatedEl=$("updated"), checkedEl=$("checked"), banner=$("banner");
+
+  $("who").textContent = CONFIG.NAME || "you";
+  document.title = "Status";
+
+  let lastState="unknown", lastGood=null, lastCheck=null, everLoaded=false;
+  const DEMO = !CONFIG.CSV_URL || CONFIG.CSV_URL.indexOf("PASTE_") === 0;
+
+  const EMOJI={green:"\uD83D\uDFE2",yellow:"\uD83D\uDFE1",red:"\uD83D\uDD34",unknown:"\u26AA"};
+
+  // ---- tiny quote-aware CSV parser ----
+  function parseCSV(text){
+    const rows=[]; let row=[], field="", i=0, q=false;
+    text=text.replace(/^\uFEFF/,"");
+    while(i<text.length){
+      const c=text[i];
+      if(q){
+        if(c==='"'){ if(text[i+1]==='"'){field+='"';i+=2;continue;} q=false;i++;continue; }
+        field+=c;i++;continue;
+      }
+      if(c==='"'){q=true;i++;continue;}
+      if(c===','){row.push(field);field="";i++;continue;}
+      if(c==='\r'){i++;continue;}
+      if(c==='\n'){row.push(field);rows.push(row);row=[];field="";i++;continue;}
+      field+=c;i++;
+    }
+    row.push(field); rows.push(row);
+    return rows;
+  }
+
+  function normStatus(s){
+    s=(s||"").trim().toLowerCase();
+    if(["green","g","ok","good","fine","all good","1"].includes(s)) return "green";
+    if(["yellow","amber","y","warn","warning","caution","watch","2"].includes(s)) return "yellow";
+    if(["red","r","problem","help","urgent","stop","3"].includes(s)) return "red";
+    return "unknown";
+  }
+
+  function render(state, note, updated){
+    lastState=state;
+    page.setAttribute("data-state", state);
+    document.querySelectorAll(".lamp").forEach(l=>{
+      l.classList.toggle("on", l.getAttribute("data-lamp")===state);
+    });
+    const c = CONFIG.COPY[state] || CONFIG.COPY.unknown;
+    word.textContent = c.word;
+    sub.textContent  = c.sub;
+    noteEl.textContent = (note && note.trim()) ? note : "No notes right now.";
+    updatedEl.innerHTML = updated ? ("Latest update from me: <b>"+escapeHTML(updated)+"</b>") : "";
+    document.title = EMOJI[state] + "  " + c.word;
+    setFavicon(state);
+  }
+
+  function escapeHTML(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+
+  function setFavicon(state){
+    const col={green:"#3f9c5c",yellow:"#dc9c22",red:"#cf422f",unknown:"#98a2a8"}[state];
+    const cv=document.createElement("canvas"); cv.width=cv.height=64;
+    const x=cv.getContext("2d");
+    x.beginPath(); x.arc(32,32,26,0,7); x.fillStyle=col; x.fill();
+    let link=document.querySelector("link[rel~='icon']");
+    if(!link){ link=document.createElement("link"); link.rel="icon"; document.head.appendChild(link); }
+    link.href=cv.toDataURL("image/png");
+  }
+
+  function relTime(d){
+    const s=Math.round((Date.now()-d)/1000);
+    if(s<45) return "just now";
+    if(s<90) return "a minute ago";
+    if(s<3600) return Math.round(s/60)+" minutes ago";
+    if(s<7200) return "an hour ago";
+    return Math.round(s/3600)+" hours ago";
+  }
+
+  function paintChecked(){
+    if(!lastCheck){ checkedEl.textContent="checking…"; return; }
+    checkedEl.textContent = "Checks itself every "+CONFIG.REFRESH_MINUTES+
+      " min \u00B7 last checked "+relTime(lastCheck);
+  }
+
+  async function load(){
+    if(DEMO){
+      render("green", "Everything shipped on schedule and the warehouse is calm. Nothing for you to do — this is just a sample so you can see the page.", "sample data");
+      lastCheck=new Date(); everLoaded=true; banner.classList.add("show");
+      banner.textContent="Demo mode — add your published sheet link in CONFIG.CSV_URL to go live.";
+      paintChecked(); return;
+    }
+    try{
+      const url=CONFIG.CSV_URL + (CONFIG.CSV_URL.indexOf("?")>-1?"&":"?") + "cb=" + Date.now();
+      const res=await fetch(url, {cache:"no-store"});
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      const rows=parseCSV(await res.text());
+      const headers=(rows[0]||[]).map(h=>h.trim().toLowerCase());
+      const vals=rows[1]||[];
+      const rec={}; headers.forEach((h,i)=>rec[h]=(vals[i]||"").trim());
+      const state=normStatus(rec.status);
+      render(state, rec.note||"", rec.updated||"");
+      lastGood={state, note:rec.note||"", updated:rec.updated||""};
+      everLoaded=true;
+      lastCheck=new Date();
+      banner.classList.remove("show");
+    }catch(err){
+      lastCheck=new Date();
+      if(lastGood){
+        render(lastGood.state, lastGood.note, lastGood.updated);
+        banner.textContent="Couldn't reach the board just now — showing the last update I got. It'll try again automatically.";
+      }else{
+        render("unknown","","");
+        banner.textContent="Couldn't reach the board. This is likely a connection issue on this end, not a real problem.";
+      }
+      banner.classList.add("show");
+    }
+    paintChecked();
+  }
+
+  $("refresh").addEventListener("click", load);
+  document.addEventListener("visibilitychange", ()=>{
+    if(!document.hidden && (!lastCheck || Date.now()-lastCheck>60000)) load();
+  });
+
+  load();
+  setInterval(load, CONFIG.REFRESH_MINUTES*60*1000);
+  setInterval(paintChecked, 15000);
+})();
+</script>
+</body>
+</html>
