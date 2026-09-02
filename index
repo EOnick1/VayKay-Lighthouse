@@ -15,7 +15,7 @@
 const CONFIG = {
   // 1) Paste the "Publish to web -> CSV" link from your Google Sheet here.
   //    Leave it as-is to see the demo.
-  CSV_URL: https://docs.google.com/spreadsheets/d/e/2PACX-1vSlNnvgBwkcmnNL20fivuzfGnFwZBzaWH2f-56-EdveTwwCj9-WLgLrUJlJZrYw3_o-VxYQzAO4vsot/pub?gid=0&single=true&output=csv,
+  CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSlNnvgBwkcmnNL20fivuzfGnFwZBzaWH2f-56-EdveTwwCj9-WLgLrUJlJZrYw3_o-VxYQzAO4vsot/pub?gid=0&single=true&output=csv",
 
   // 2) Who this page is for (shown at the top).
   NAME: "Kaylee",
